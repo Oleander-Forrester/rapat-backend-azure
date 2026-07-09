@@ -1,0 +1,14 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio files
+.vs/
+*.user
+*.suo
+
+# Environment / Secrets
+appsettings.Development.json
+
+# Uploads / Static files
+wwwroot/uploads/

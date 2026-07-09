@@ -1,0 +1,6 @@
+@rapat_backend_HostAddress = http://localhost:5115
+
+GET {{rapat_backend_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

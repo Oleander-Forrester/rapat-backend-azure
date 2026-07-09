@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json.schemastore.org/launchsettings.json",
+  "profiles": {
+    "http": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://0.0.0.0:54321",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "DECRYPT_KEY_JWT": "518d96e5383b5606c4722f60f0ce7f9d8710a4bd383312815341ea1a664abd21",
+        "DECRYPT_KEY_CONNECTION_STRING": "80ad226fefefa6565197e091d6c465d2"
+      }
+    },
+    "https": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "https://0.0.0.0:7095;http://0.0.0.0:54321",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "DECRYPT_KEY_JWT": "518d96e5383b5606c4722f60f0ce7f9d8710a4bd383312815341ea1a664abd21",
+        "DECRYPT_KEY_CONNECTION_STRING": "80ad226fefefa6565197e091d6c465d2"
+      }
+    }
+  }
+}
