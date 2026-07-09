@@ -17,11 +17,13 @@ namespace rapat_backend.Controllers
     public class RapatController(
       IRapatRepository repo,
       IWebHostEnvironment env,
-      IMicrosoftTeamsService teamsService) : ControllerBase
+      IMicrosoftTeamsService teamsService,
+      BlobStorageService blobStorageService) : ControllerBase
     {
         private readonly IRapatRepository _repo = repo;
         private readonly IWebHostEnvironment _env = env;
         private readonly IMicrosoftTeamsService _teamsService = teamsService;
+        private readonly BlobStorageService _blobStorageService = blobStorageService;
 
         private const string ClaimNamaAkun = "namaakun";
         private const string InvalidSessionMessage = "Sesi tidak valid.";
@@ -261,30 +263,37 @@ namespace rapat_backend.Controllers
             if (string.IsNullOrEmpty(username)) return Unauthorized(new { message = InvalidSessionMessage });
 
             string? filePath = null;
+            string? tempLocalPath = null;
             try
             {
                 if (dto.FileDokumentasi != null && dto.FileDokumentasi.Length > 0)
                 {
-                    var rootPath = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-                    var folder = Path.Combine(rootPath, "uploads", "rapat");
-                    if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
+                    var tempFolder = Path.Combine(Path.GetTempPath(), "rapat_temp");
+                    if (!Directory.Exists(tempFolder)) Directory.CreateDirectory(tempFolder);
 
                     var fileExtension = Path.GetExtension(dto.FileDokumentasi.FileName);
-                    var fileName = $"{Guid.NewGuid()}_{dto.RapatId}{fileExtension}";
-                    var savePath = Path.Combine(folder, fileName);
+                    var tempFileName = $"{Guid.NewGuid()}{fileExtension}";
+                    tempLocalPath = Path.Combine(tempFolder, tempFileName);
 
-                    using (var stream = new FileStream(savePath, FileMode.Create))
+                    using (var stream = new FileStream(tempLocalPath, FileMode.Create))
                         await dto.FileDokumentasi.CopyToAsync(stream);
 
-                    TryAddWatermarkToImage(savePath, dto.Tempat, dto.Tanggal);
+                    TryAddWatermarkToImage(tempLocalPath, dto.Tempat, dto.Tanggal);
 
-                    filePath = $"/uploads/rapat/{fileName}";
+                    filePath = await _blobStorageService.UploadFileAsync(tempLocalPath, dto.FileDokumentasi.ContentType ?? "application/octet-stream", "rapat");
                 }
 
                 var success = await _repo.CreateMoMAsync(dto, filePath ?? "", username);
                 return success ? Ok(new { message = "Notulensi berhasil disimpan.", path = filePath }) : BadRequest(new { message = "Gagal simpan ke DB." });
             }
             catch (Exception ex) { return BadRequest(new { message = ex.Message }); }
+            finally
+            {
+                if (!string.IsNullOrEmpty(tempLocalPath) && System.IO.File.Exists(tempLocalPath))
+                {
+                    try { System.IO.File.Delete(tempLocalPath); } catch {}
+                }
+            }
         }
 
 #pragma warning disable CA1416
@@ -635,19 +644,7 @@ namespace rapat_backend.Controllers
             {
                 if (dto.FileBukti != null && dto.FileBukti.Length > 0)
                 {
-                    var rootPath = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-                    var folder = Path.Combine(rootPath, "uploads", "tindaklanjut");
-                    if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
-
-                    var fileExtension = Path.GetExtension(dto.FileBukti.FileName);
-                    var timestamp = DateTime.Now.ToString("yyMMddHHmmss");
-                    var fileName = $"B_{dto.TindakLanjutId}_{timestamp}{fileExtension}";
-                    var savePath = Path.Combine(folder, fileName);
-
-                    using (var stream = new FileStream(savePath, FileMode.Create))
-                        await dto.FileBukti.CopyToAsync(stream);
-
-                    filePath = $"/uploads/tindaklanjut/{fileName}";
+                    filePath = await _blobStorageService.UploadFileAsync(dto.FileBukti, "tindaklanjut");
                 }
 
                 var success = await _repo.UpdateStatusItemAksiAsync(dto.TindakLanjutId, dto.StatusBaru, filePath, username);

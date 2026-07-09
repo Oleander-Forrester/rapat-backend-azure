@@ -93,6 +93,7 @@ namespace rapat_backend
             builder.Services.AddScoped<IAuthorizationHandler, HasPermissionHandler>();
             builder.Services.AddScoped<IMicrosoftTeamsService, MicrosoftTeamsService>();
             builder.Services.AddScoped<IRapatRepository, RapatRepository>();
+            builder.Services.AddScoped<BlobStorageService>();
 
             builder.Services.AddAuthorizationBuilder()
                 .AddPolicy("HasPermission", policy =>
