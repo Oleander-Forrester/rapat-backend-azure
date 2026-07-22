@@ -21,7 +21,7 @@ jobs:
       - name: Set up .NET Core
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.x'
+          dotnet-version: '8.x'
 
       - name: Build with dotnet
         run: dotnet build --configuration Release
@@ -52,4 +52,4 @@ jobs:
           app-name: 'rapat-backend-azure'
           slot-name: 'Production'
           package: .
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_B78BE0DB3E4B4BCEB7D8153BD90222FB }}
+          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_295969D045004C698E5D8D7025F20265 }}
