@@ -1,7 +1,7 @@
 # Docs for the Azure Web Apps Deploy action: https://github.com/Azure/webapps-deploy
 # More GitHub Actions for Azure: https://github.com/Azure/actions
 
-name: Build and deploy ASP.Net Core app to Azure Web App - rapat-backend-azure
+name: Build and deploy ASP.Net Core app to Azure Web App - rapat-backend-azuree
 
 on:
   push:
@@ -51,15 +51,15 @@ jobs:
       - name: Login to Azure
         uses: azure/login@v2
         with:
-          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_06BF504BAF604B8FA8C3A5F584145695 }}
-          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_ACD6C46B10794375AF4F631FF1AC808F }}
-          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_65EB039CBD874F87A36E92074C370690 }}
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_ABBD1948727441D4A0533D51EF8E1387 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_2BF4FC8B82A74D9CB5053DC114A6823B }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_C950494C8A984A31AF69A57F6E38E4D5 }}
 
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
-          app-name: 'rapat-backend-azure'
+          app-name: 'rapat-backend-azuree'
           slot-name: 'Production'
           package: .
           
