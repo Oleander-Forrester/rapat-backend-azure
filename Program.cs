@@ -166,7 +166,7 @@ namespace rapat_backend
                 RequestPath = ""
             });
 
-            if (app.Environment.IsDevelopment())
+           
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();
