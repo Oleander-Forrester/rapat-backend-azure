@@ -1,6 +1,7 @@
 using rapat_backend.Helpers;
 using rapat_backend.Repositories.Implementations;
 using rapat_backend.Repositories.Interfaces;
+using rapat_backend.Services;
 using rapat_backend.Services.Implementations;
 using rapat_backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -93,7 +94,7 @@ namespace rapat_backend
             builder.Services.AddScoped<IAuthorizationHandler, HasPermissionHandler>();
             builder.Services.AddScoped<IMicrosoftTeamsService, MicrosoftTeamsService>();
             builder.Services.AddScoped<IRapatRepository, RapatRepository>();
-            builder.Services.AddScoped<BlobStorageService>();
+            builder.Services.AddScoped<IAzureStorageService, AzureStorageService>();
 
             builder.Services.AddAuthorizationBuilder()
                 .AddPolicy("HasPermission", policy =>

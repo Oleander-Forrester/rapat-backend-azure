@@ -3,6 +3,7 @@ using rapat_backend.Helpers;
 using rapat_backend.Services.Interfaces;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using Microsoft.AspNetCore.Identity;
 
 namespace rapat_backend.Services.Implementations
 {
@@ -15,13 +16,29 @@ namespace rapat_backend.Services.Implementations
 
         public async Task<LoginResponseDto?> AuthenticateAsync(LoginRequestDto dto)
         {
-            var (IsLDAPSuccess, NormalizedUsername, ErrorLDAPMessage) = await _ldapService.AuthenticateAsync(dto.Username, dto.Password);
-            if (!IsLDAPSuccess)
+            var (karyawanId, fullName, passwordHash) = await _userService.GetEmployeeDetailsAsync(dto.Username);
+            if (string.IsNullOrEmpty(karyawanId) || string.IsNullOrEmpty(passwordHash))
             {
-                return new LoginResponseDto { ErrorMessage = ErrorLDAPMessage! };
+                return new LoginResponseDto { ErrorMessage = "Username tidak ditemukan atau password belum diset." };
             }
 
-            var (IsUserSuccess, ListAplikasi, ErrorUserMessage) = await _userService.AuthenticateAsync(NormalizedUsername!, dto.JenisAplikasi);
+            var hasher = new PasswordHasher<string>();
+            PasswordVerificationResult verificationResult;
+            try
+            {
+                verificationResult = hasher.VerifyHashedPassword(dto.Username, passwordHash, dto.Password);
+            }
+            catch
+            {
+                return new LoginResponseDto { ErrorMessage = "Format password di database kaga valid." };
+            }
+
+            if (verificationResult == PasswordVerificationResult.Failed)
+            {
+                return new LoginResponseDto { ErrorMessage = "Password salah." };
+            }
+
+            var (IsUserSuccess, ListAplikasi, ErrorUserMessage) = await _userService.AuthenticateAsync(dto.Username, dto.JenisAplikasi);
             if (!IsUserSuccess)
             {
                 return new LoginResponseDto { ErrorMessage = ErrorUserMessage! };
@@ -47,14 +64,13 @@ namespace rapat_backend.Services.Implementations
             var claims = new List<Claim>
             {
                 new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                new("namaakun", NormalizedUsername!),
+                new("namaakun", dto.Username),
             };
 
             var token = JwtHelper.GenerateToken(key, issuer, audience, TimeSpan.FromMinutes(minutes), claims);
             
-            var (karyawanId, fullName) = await _userService.GetEmployeeDetailsAsync(NormalizedUsername!);
-            var nama = fullName ?? await _ldapService.GetDisplayNameAsync(NormalizedUsername!) ?? NormalizedUsername ?? string.Empty;
-            var finalNpk = karyawanId ?? NormalizedUsername ?? string.Empty;
+            var nama = fullName ?? dto.Username;
+            var finalNpk = karyawanId ?? dto.Username;
 
             return new LoginResponseDto
             {

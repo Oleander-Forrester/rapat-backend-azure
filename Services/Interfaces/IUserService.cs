@@ -8,6 +8,6 @@ namespace rapat_backend.Services.Interfaces
         Task<(bool IsSuccess, List<string> ListPermission, string? ErrorMessage)> GetPermissionAsync(string username, string aplikasi, string role);
         Task<bool> HasPermissionAsync(string username, string aplikasi, string role, string permission);
         Task<(bool IsSuccess, List<Menu> ListMenu, string? ErrorMessage)> GetListMenuAsync(string username, string aplikasi, string role);
-        Task<(string? KaryawanId, string? FullName)> GetEmployeeDetailsAsync(string username);
+        Task<(string? KaryawanId, string? FullName, string? PasswordHash)> GetEmployeeDetailsAsync(string username);
     }
 }

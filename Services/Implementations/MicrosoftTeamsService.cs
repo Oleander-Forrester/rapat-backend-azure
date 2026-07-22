@@ -102,80 +102,92 @@ namespace rapat_backend.Services.Implementations
                     calendarEvent.Location = new Location { DisplayName = locationName ?? "Lokasi Fisik" };
                 }
 
-                var createdEvent = await graphClient.Users[userId].Events
-                    .Request()
-                    .Header("Prefer", "outlook.timezone=\"SE Asia Standard Time\"")
-                    .AddAsync(calendarEvent);
-
-                string eventId = createdEvent.Id;
+                string eventId = Guid.NewGuid().ToString();
                 string joinUrl = "";
+                Event createdEvent = null;
 
-                if (isOnline)
+                try
                 {
-                    if (createdEvent.OnlineMeeting != null && !string.IsNullOrEmpty(createdEvent.OnlineMeeting.JoinUrl))
+                    createdEvent = await graphClient.Users[userId].Events
+                        .Request()
+                        .Header("Prefer", "outlook.timezone=\"SE Asia Standard Time\"")
+                        .AddAsync(calendarEvent);
+
+                    eventId = createdEvent.Id;
+
+                    if (isOnline)
                     {
-                        joinUrl = createdEvent.OnlineMeeting.JoinUrl;
-                    }
-                    else if (!string.IsNullOrEmpty(createdEvent.OnlineMeetingUrl) && createdEvent.OnlineMeetingUrl.Contains("teams.microsoft.com", StringComparison.OrdinalIgnoreCase))
-                    {
-                        joinUrl = createdEvent.OnlineMeetingUrl;
-                    }
-
-                    int[] delaysMs = { 3000, 5000, 8000 };
-                    foreach (var delayMs in delaysMs)
-                    {
-                        if (!string.IsNullOrEmpty(joinUrl)) break;
-
-                        await Task.Delay(delayMs);
-
-                        var refreshedEvent = await graphClient.Users[userId].Events[eventId]
-                            .Request()
-                            .Select("id,onlineMeeting,onlineMeetingUrl")
-                            .GetAsync();
-
-                        if (refreshedEvent.OnlineMeeting != null && !string.IsNullOrEmpty(refreshedEvent.OnlineMeeting.JoinUrl))
+                        if (createdEvent.OnlineMeeting != null && !string.IsNullOrEmpty(createdEvent.OnlineMeeting.JoinUrl))
                         {
-                            joinUrl = refreshedEvent.OnlineMeeting.JoinUrl;
-                            break;
+                            joinUrl = createdEvent.OnlineMeeting.JoinUrl;
                         }
-                        if (!string.IsNullOrEmpty(refreshedEvent.OnlineMeetingUrl) && refreshedEvent.OnlineMeetingUrl.Contains("teams.microsoft.com", StringComparison.OrdinalIgnoreCase))
+                        else if (!string.IsNullOrEmpty(createdEvent.OnlineMeetingUrl) && createdEvent.OnlineMeetingUrl.Contains("teams.microsoft.com", StringComparison.OrdinalIgnoreCase))
                         {
-                            joinUrl = refreshedEvent.OnlineMeetingUrl;
-                            break;
+                            joinUrl = createdEvent.OnlineMeetingUrl;
                         }
-                    }
 
-                    if (string.IsNullOrEmpty(joinUrl))
-                    {
-                        try
+                        int[] delaysMs = { 3000, 5000, 8000 };
+                        foreach (var delayMs in delaysMs)
                         {
-                            var onlineMeeting = new OnlineMeeting
-                            {
-                                StartDateTime = mulai,
-                                EndDateTime = selesai,
-                                Subject = judul ?? "Rapat",
-                                Participants = new MeetingParticipants
-                                {
-                                    Attendees = validEmails.Select(email => new MeetingParticipantInfo
-                                    {
-                                        Upn = email
-                                    }).ToList()
-                                }
-                            };
+                            if (!string.IsNullOrEmpty(joinUrl)) break;
 
-                            var createdOnlineMeeting = await graphClient.Users[userId].OnlineMeetings
+                            await Task.Delay(delayMs);
+
+                            var refreshedEvent = await graphClient.Users[userId].Events[eventId]
                                 .Request()
-                                .AddAsync(onlineMeeting);
+                                .Select("id,onlineMeeting,onlineMeetingUrl")
+                                .GetAsync();
 
-                            if (!string.IsNullOrEmpty(createdOnlineMeeting.JoinWebUrl))
+                            if (refreshedEvent.OnlineMeeting != null && !string.IsNullOrEmpty(refreshedEvent.OnlineMeeting.JoinUrl))
                             {
-                                joinUrl = createdOnlineMeeting.JoinWebUrl;
+                                joinUrl = refreshedEvent.OnlineMeeting.JoinUrl;
+                                break;
+                            }
+                            if (!string.IsNullOrEmpty(refreshedEvent.OnlineMeetingUrl) && refreshedEvent.OnlineMeetingUrl.Contains("teams.microsoft.com", StringComparison.OrdinalIgnoreCase))
+                            {
+                                joinUrl = refreshedEvent.OnlineMeetingUrl;
+                                break;
                             }
                         }
-                        catch (Exception ex)
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning("Gagal bikin Calendar Event (Mungkin karena permission Calendars.ReadWrite belum Application): {Message}. Melanjutkan ke fallback OnlineMeetings.", ex.Message);
+                }
+
+                if (isOnline && string.IsNullOrEmpty(joinUrl))
+                {
+                    try
+                    {
+                        var onlineMeeting = new OnlineMeeting
                         {
-                            _logger.LogWarning(ex, "Gagal create online meeting via Online Meeting API sebagai fallback");
+                            StartDateTime = mulai,
+                            EndDateTime = selesai,
+                            Subject = judul ?? "Rapat",
+                            Participants = new MeetingParticipants
+                            {
+                                Attendees = validEmails.Select(email => new MeetingParticipantInfo
+                                {
+                                    Upn = email
+                                }).ToList()
+                            }
+                        };
+
+                        var createdOnlineMeeting = await graphClient.Users[userId].OnlineMeetings
+                            .Request()
+                            .AddAsync(onlineMeeting);
+
+                        if (!string.IsNullOrEmpty(createdOnlineMeeting.JoinWebUrl))
+                        {
+                            joinUrl = createdOnlineMeeting.JoinWebUrl;
+                            eventId = createdOnlineMeeting.Id ?? eventId; // simpan id online meeting sbg eventId
                         }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Gagal create online meeting via Online Meeting API sebagai fallback");
+                        throw; // Lempar exception hanya jika fallback juga gagal
                     }
                 }
 

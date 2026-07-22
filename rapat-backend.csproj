@@ -12,10 +12,7 @@
 	<ItemGroup>
 		<PackageReference Include="AutoMapper" Version="13.0.1" />
 		<PackageReference Include="Azure.AI.OpenAI" Version="2.1.0" />
-
-		<PackageReference Include="Azure.Identity" Version="1.21.0" />
-
-		<PackageReference Include="Azure.Storage.Blobs" Version="12.29.1" />
+		<PackageReference Include="Azure.Storage.Blobs" Version="12.14.1" />
 		<PackageReference Include="EPPlus" Version="7.5.2" />
 
 		<PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />
