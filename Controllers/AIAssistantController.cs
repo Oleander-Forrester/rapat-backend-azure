@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.CognitiveServices.Speech;
 using Microsoft.CognitiveServices.Speech.Audio;
@@ -29,6 +30,8 @@ namespace rapat_backend.Controllers
 
             // 1. Save temp file
             var tempInputPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".m4a");
+            var tempWavPath = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName() + ".wav");
+
             using (var stream = new FileStream(tempInputPath, FileMode.Create))
             {
                 await file.CopyToAsync(stream);
@@ -71,18 +74,29 @@ namespace rapat_backend.Controllers
 
                 await speechRecognizer.StartContinuousRecognitionAsync();
 
-                // Kirim semua data audio ke push stream
-                using (var reader = new MediaFoundationReader(tempInputPath))
+                // Konversi audio ke format WAV PCM 16kHz Mono menggunakan ffmpeg (cross-platform Linux & Windows)
+                var startInfo = new ProcessStartInfo
                 {
-                    var outFormat = new WaveFormat(16000, 16, 1);
-                    using (var resampler = new MediaFoundationResampler(reader, outFormat))
+                    FileName = "ffmpeg",
+                    Arguments = $"-y -i \"{tempInputPath}\" -ar 16000 -ac 1 -c:a pcm_s16le \"{tempWavPath}\"",
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using (var process = Process.Start(startInfo))
+                {
+                    await process!.WaitForExitAsync();
+                }
+
+                using (var reader = new WaveFileReader(tempWavPath))
+                {
+                    byte[] buffer = new byte[3200];
+                    int bytesRead;
+                    while ((bytesRead = reader.Read(buffer, 0, buffer.Length)) > 0)
                     {
-                        byte[] buffer = new byte[3200];
-                        int bytesRead;
-                        while ((bytesRead = resampler.Read(buffer, 0, buffer.Length)) > 0)
-                        {
-                            pushStream.Write(buffer, bytesRead);
-                        }
+                        pushStream.Write(buffer, bytesRead);
                     }
                 }
                 pushStream.Close(); // Signal: audio selesai
@@ -168,6 +182,10 @@ namespace rapat_backend.Controllers
                 if (System.IO.File.Exists(tempInputPath))
                 {
                     System.IO.File.Delete(tempInputPath);
+                }
+                if (System.IO.File.Exists(tempWavPath))
+                {
+                    System.IO.File.Delete(tempWavPath);
                 }
             }
         }

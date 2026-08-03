@@ -1,7 +1,6 @@
 using rapat_backend.Helpers;
 using rapat_backend.Repositories.Implementations;
 using rapat_backend.Repositories.Interfaces;
-using rapat_backend.Services;
 using rapat_backend.Services.Implementations;
 using rapat_backend.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -91,10 +90,10 @@ namespace rapat_backend
             builder.Services.AddScoped<ILdapService, LdapService>();
             builder.Services.AddScoped<IAuthService, AuthService>();
             builder.Services.AddScoped<IUserService, UserService>();
+            builder.Services.AddScoped<IPushNotificationService, PushNotificationService>();
             builder.Services.AddScoped<IAuthorizationHandler, HasPermissionHandler>();
             builder.Services.AddScoped<IMicrosoftTeamsService, MicrosoftTeamsService>();
             builder.Services.AddScoped<IRapatRepository, RapatRepository>();
-            builder.Services.AddScoped<IAzureStorageService, AzureStorageService>();
 
             builder.Services.AddAuthorizationBuilder()
                 .AddPolicy("HasPermission", policy =>
@@ -166,7 +165,7 @@ namespace rapat_backend
                 RequestPath = ""
             });
 
-           
+            if (app.Environment.IsDevelopment())
             {
                 app.UseSwagger();
                 app.UseSwaggerUI();

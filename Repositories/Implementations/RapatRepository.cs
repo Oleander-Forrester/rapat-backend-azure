@@ -301,6 +301,22 @@ namespace rapat_backend.Repositories.Implementations
             return list;
         }
 
+        private async Task AutoCancelExpiredDraftsAsync()
+        {
+            try
+            {
+                using var conn = new SqlConnection(_conn);
+                await conn.OpenAsync();
+                var query = "UPDATE ars_trrapat SET rap_status = 'Dibatalkan' WHERE rap_status = 'Draft' AND rap_waktu_selesai < DATEADD(hour, 7, GETUTCDATE())";
+                using var cmd = new SqlCommand(query, conn);
+                await cmd.ExecuteNonQueryAsync();
+            }
+            catch
+            {
+                // Ignore any failure so it doesn't block data fetching
+            }
+        }
+
         public async Task<(IEnumerable<RapatDto> Data, int TotalData)> GetAllByUserAsync(
          string username,
          int page,
@@ -312,6 +328,8 @@ namespace rapat_backend.Repositories.Implementations
          DateTime? startDate = null,
          DateTime? endDate = null)
         {
+            await AutoCancelExpiredDraftsAsync();
+
             var list = new List<RapatDto>();
             int totalData = 0;
 
@@ -419,6 +437,8 @@ namespace rapat_backend.Repositories.Implementations
 
         public async Task<RapatDetailDto?> GetByIdAsync(int rapatId, string? username = null)
         {
+            await AutoCancelExpiredDraftsAsync();
+
             RapatDetailDto? rapat = null;
             using (var conn = new SqlConnection(_conn))
             {

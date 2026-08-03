@@ -9,9 +9,10 @@ namespace rapat_backend.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
-    public class AuthController(IAuthService auth) : ControllerBase
+    public class AuthController(IAuthService auth, IPushNotificationService pushNotificationService) : ControllerBase
     {
         private readonly IAuthService _auth = auth;
+        private readonly IPushNotificationService _pushNotificationService = pushNotificationService;
 
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequestDto dto)
@@ -72,6 +73,18 @@ namespace rapat_backend.Controllers
             var res = await _auth.GetMenuAsync(sanitizedDto);
             if (!string.IsNullOrEmpty(res?.ErrorMessage)) return BadRequest(new { message = res?.ErrorMessage });
             return Ok(res);
+        }
+        [Authorize]
+        [HttpPost("SavePushToken")]
+        public async Task<IActionResult> SavePushToken([FromBody] SavePushTokenRequest dto)
+        {
+            var npk = User.FindFirst("namaakun")?.Value;
+            if (string.IsNullOrEmpty(npk)) return Unauthorized(new { message = "Token tidak valid atau NPK tidak ditemukan." });
+
+            var success = await _pushNotificationService.SavePushTokenAsync(npk, dto.ExpoPushToken);
+            if (!success) return StatusCode(500, new { message = "Gagal menyimpan push token." });
+
+            return Ok(new { message = "Push token berhasil disimpan." });
         }
     }
 }

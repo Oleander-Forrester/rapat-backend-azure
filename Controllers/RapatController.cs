@@ -18,12 +18,12 @@ namespace rapat_backend.Controllers
       IRapatRepository repo,
       IWebHostEnvironment env,
       IMicrosoftTeamsService teamsService,
-      IAzureStorageService azureStorageService) : ControllerBase
+      IPushNotificationService pushNotificationService) : ControllerBase
     {
         private readonly IRapatRepository _repo = repo;
         private readonly IWebHostEnvironment _env = env;
         private readonly IMicrosoftTeamsService _teamsService = teamsService;
-        private readonly IAzureStorageService _azureStorageService = azureStorageService;
+        private readonly IPushNotificationService _pushNotificationService = pushNotificationService;
 
         private const string ClaimNamaAkun = "namaakun";
         private const string InvalidSessionMessage = "Sesi tidak valid.";
@@ -135,6 +135,16 @@ namespace rapat_backend.Controllers
                 if (newId > 0 && !string.IsNullOrEmpty(eventIdToSave))
                 {
                     await _repo.UpdateEventIdAsync(newId, eventIdToSave);
+                }
+
+                if (newId > 0 && dto.PesertaKaryawanIds != null && dto.PesertaKaryawanIds.Any())
+                {
+                    await _pushNotificationService.SendNotificationAsync(
+                        dto.PesertaKaryawanIds,
+                        "Undangan Rapat Baru",
+                        $"Anda diundang ke rapat: {dto.Judul} pada {dto.WaktuMulai:dd MMM yyyy HH:mm}",
+                        new { rapatId = newId }
+                    );
                 }
 
                 return Ok(new { message = "Draft Rapat berhasil disimpan.", id = newId, link = dto.Link });
@@ -267,22 +277,20 @@ namespace rapat_backend.Controllers
             {
                 if (dto.FileDokumentasi != null && dto.FileDokumentasi.Length > 0)
                 {
+                    var rootPath = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                    var folder = Path.Combine(rootPath, "uploads", "rapat");
+                    if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
+
                     var fileExtension = Path.GetExtension(dto.FileDokumentasi.FileName);
-                    var timestamp = DateTime.Now.ToString("yyMMddHHmmss");
-                    var uniqueFileName = $"rapat/{Guid.NewGuid()}_{dto.RapatId}_{timestamp}{fileExtension}";
+                    var fileName = $"{Guid.NewGuid()}_{dto.RapatId}{fileExtension}";
+                    var savePath = Path.Combine(folder, fileName);
 
-                    using var stream = dto.FileDokumentasi.OpenReadStream();
-                    using var watermarkedStream = TryAddWatermarkToImage(stream, fileExtension, dto.Tempat, dto.Tanggal);
+                    using (var stream = new FileStream(savePath, FileMode.Create))
+                        await dto.FileDokumentasi.CopyToAsync(stream);
 
-                    if (watermarkedStream != null)
-                    {
-                        filePath = await _azureStorageService.UploadFileAsync(watermarkedStream, uniqueFileName, dto.FileDokumentasi.ContentType);
-                    }
-                    else
-                    {
-                        stream.Position = 0; // Ensure stream is at the beginning
-                        filePath = await _azureStorageService.UploadFileAsync(stream, uniqueFileName, dto.FileDokumentasi.ContentType);
-                    }
+                    TryAddWatermarkToImage(savePath, dto.Tempat, dto.Tanggal);
+
+                    filePath = $"/uploads/rapat/{fileName}";
                 }
 
                 var success = await _repo.CreateMoMAsync(dto, filePath ?? "", username);
@@ -292,55 +300,66 @@ namespace rapat_backend.Controllers
         }
 
 #pragma warning disable CA1416
-        private static MemoryStream? TryAddWatermarkToImage(Stream imageStream, string extension, string? tempat, string? tanggal)
+        private static void TryAddWatermarkToImage(string savePath, string? tempat, string? tanggal)
         {
             if (string.IsNullOrWhiteSpace(tempat) && string.IsNullOrWhiteSpace(tanggal))
-                return null;
+                return;
 
             try
             {
-                extension = extension.ToLowerInvariant();
+                var extension = Path.GetExtension(savePath).ToLowerInvariant();
                 if (extension != ".jpg" && extension != ".jpeg" && extension != ".png")
-                    return null;
+                    return;
 
-                using var image = System.Drawing.Image.FromStream(imageStream);
-                using var bitmap = new System.Drawing.Bitmap(image);
-                using var graphics = System.Drawing.Graphics.FromImage(bitmap);
+                byte[] imageBytes = System.IO.File.ReadAllBytes(savePath);
+                using (var ms = new System.IO.MemoryStream(imageBytes))
+                {
+                    using (var image = System.Drawing.Image.FromStream(ms))
+                    {
+                        using (var bitmap = new System.Drawing.Bitmap(image))
+                        {
+                            using (var graphics = System.Drawing.Graphics.FromImage(bitmap))
+                            {
+                                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                                graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                                graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
 
-                graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                                float fontSize = Math.Max(12f, bitmap.Height * 0.025f);
+                                using (var font = new System.Drawing.Font("Arial", fontSize, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Pixel))
+                                {
+                                    var lines = new List<string>();
+                                    if (!string.IsNullOrWhiteSpace(tempat)) lines.Add(tempat);
+                                    if (!string.IsNullOrWhiteSpace(tanggal)) lines.Add(tanggal);
 
-                float fontSize = Math.Max(12f, bitmap.Height * 0.025f);
-                using var font = new System.Drawing.Font("Arial", fontSize, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Pixel);
-                var lines = new List<string>();
-                if (!string.IsNullOrWhiteSpace(tempat)) lines.Add(tempat);
-                if (!string.IsNullOrWhiteSpace(tanggal)) lines.Add(tanggal);
+                                    string text = string.Join("\n", lines);
+                                    var textSize = graphics.MeasureString(text, font);
 
-                string text = string.Join("\n", lines);
-                var textSize = graphics.MeasureString(text, font);
+                                    float x = 20f;
+                                    float y = bitmap.Height - textSize.Height - 20f;
 
-                float x = 20f;
-                float y = bitmap.Height - textSize.Height - 20f;
+                                    using (var bgBrush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(140, 0, 0, 0)))
+                                    {
+                                        graphics.FillRectangle(bgBrush, x - 10f, y - 10f, textSize.Width + 20f, textSize.Height + 20f);
+                                    }
 
-                using var bgBrush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(140, 0, 0, 0));
-                graphics.FillRectangle(bgBrush, x - 10f, y - 10f, textSize.Width + 20f, textSize.Height + 20f);
+                                    using (var textBrush = new System.Drawing.SolidBrush(System.Drawing.Color.White))
+                                    {
+                                        graphics.DrawString(text, font, textBrush, x, y);
+                                    }
+                                }
+                            }
 
-                using var textBrush = new System.Drawing.SolidBrush(System.Drawing.Color.White);
-                graphics.DrawString(text, font, textBrush, x, y);
-
-                System.Drawing.Imaging.ImageFormat format = System.Drawing.Imaging.ImageFormat.Jpeg;
-                if (extension == ".png") format = System.Drawing.Imaging.ImageFormat.Png;
-
-                var outStream = new MemoryStream();
-                bitmap.Save(outStream, format);
-                outStream.Position = 0;
-                return outStream;
+                            System.Drawing.Imaging.ImageFormat format = System.Drawing.Imaging.ImageFormat.Jpeg;
+                            if (extension == ".png") format = System.Drawing.Imaging.ImageFormat.Png;
+                            
+                            bitmap.Save(savePath, format);
+                        }
+                    }
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[WARNING] Gagal menyematkan watermark: {ex.Message}");
-                return null;
             }
         }
 #pragma warning restore CA1416
@@ -628,7 +647,19 @@ namespace rapat_backend.Controllers
             {
                 if (dto.FileBukti != null && dto.FileBukti.Length > 0)
                 {
-                    filePath = await _azureStorageService.UploadFormFileAsync(dto.FileBukti, "tindaklanjut");
+                    var rootPath = _env.WebRootPath ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                    var folder = Path.Combine(rootPath, "uploads", "tindaklanjut");
+                    if (!Directory.Exists(folder)) Directory.CreateDirectory(folder);
+
+                    var fileExtension = Path.GetExtension(dto.FileBukti.FileName);
+                    var timestamp = DateTime.Now.ToString("yyMMddHHmmss");
+                    var fileName = $"B_{dto.TindakLanjutId}_{timestamp}{fileExtension}";
+                    var savePath = Path.Combine(folder, fileName);
+
+                    using (var stream = new FileStream(savePath, FileMode.Create))
+                        await dto.FileBukti.CopyToAsync(stream);
+
+                    filePath = $"/uploads/tindaklanjut/{fileName}";
                 }
 
                 var success = await _repo.UpdateStatusItemAksiAsync(dto.TindakLanjutId, dto.StatusBaru, filePath, username);

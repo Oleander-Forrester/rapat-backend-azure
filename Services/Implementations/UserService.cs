@@ -7,8 +7,7 @@ namespace rapat_backend.Services.Implementations
 {
     public class UserService(IConfiguration config) : IUserService
     {
-        private readonly string _conn = config.GetConnectionString("LoginConnection")!;
-        private readonly string _appConn = config.GetConnectionString("DefaultConnection")!;
+        private readonly string _conn = config.GetConnectionString("DefaultConnection")!;
         private const string UsernameParam = "@Username";
         private const string ApplicationParam = "@Aplikasi";
         private const string RoleParam = "@Role";
@@ -167,48 +166,27 @@ namespace rapat_backend.Services.Implementations
         {
             try
             {
-                string? kryId = null;
-                string? fullName = null;
-                string? kryUsername = null;
-                
-                await using (var appConn = new SqlConnection(_appConn))
+                await using var conn = new SqlConnection(_conn);
+                string query = "SELECT kry_id, kry_nama_depan, kry_nama_blkg, kry_password FROM ess_mskaryawan WHERE kry_username = @Username OR kry_id = @Username";
+                await using var cmd = new SqlCommand(query, conn);
+                cmd.Parameters.AddWithValue("@Username", username);
+
+                await conn.OpenAsync();
+                await using var reader = await cmd.ExecuteReaderAsync();
+                if (await reader.ReadAsync())
                 {
-                    string queryKaryawan = "SELECT kry_id, kry_nama_depan, kry_nama_blkg, kry_username FROM ess_mskaryawan WHERE kry_username = @Username OR kry_id = @Username";
-                    await using var cmdKaryawan = new SqlCommand(queryKaryawan, appConn);
-                    cmdKaryawan.Parameters.AddWithValue("@Username", username);
-
-                    await appConn.OpenAsync();
-                    await using var readerKaryawan = await cmdKaryawan.ExecuteReaderAsync();
-                    if (await readerKaryawan.ReadAsync())
-                    {
-                        kryId = readerKaryawan.GetString(readerKaryawan.GetOrdinal("kry_id"));
-                        string depan = readerKaryawan.IsDBNull(readerKaryawan.GetOrdinal("kry_nama_depan")) ? "" : readerKaryawan.GetString(readerKaryawan.GetOrdinal("kry_nama_depan"));
-                        string blkg = readerKaryawan.IsDBNull(readerKaryawan.GetOrdinal("kry_nama_blkg")) ? "" : readerKaryawan.GetString(readerKaryawan.GetOrdinal("kry_nama_blkg"));
-                        kryUsername = readerKaryawan.IsDBNull(readerKaryawan.GetOrdinal("kry_username")) ? "" : readerKaryawan.GetString(readerKaryawan.GetOrdinal("kry_username"));
-                        
-                        fullName = $"{depan} {blkg}".Trim();
-                    }
-                }
-
-                if (kryId != null && kryUsername != null)
-                {
-                    await using var loginConn = new SqlConnection(_conn);
-                    string queryUser = "SELECT usr_password FROM sso_msuser WHERE usr_id = @UsrId";
-                    await using var cmdUser = new SqlCommand(queryUser, loginConn);
-                    cmdUser.Parameters.AddWithValue("@UsrId", kryUsername);
-
-                    await loginConn.OpenAsync();
-                    var pwdObj = await cmdUser.ExecuteScalarAsync();
-                    string? pwdHash = pwdObj != null && pwdObj != DBNull.Value ? pwdObj.ToString() : null;
-
+                    string kryId = reader.GetString(reader.GetOrdinal("kry_id"));
+                    string depan = reader.IsDBNull(reader.GetOrdinal("kry_nama_depan")) ? "" : reader.GetString(reader.GetOrdinal("kry_nama_depan"));
+                    string blkg = reader.IsDBNull(reader.GetOrdinal("kry_nama_blkg")) ? "" : reader.GetString(reader.GetOrdinal("kry_nama_blkg"));
+                    string? pwdHash = reader.IsDBNull(reader.GetOrdinal("kry_password")) ? null : reader.GetString(reader.GetOrdinal("kry_password"));
+                    
+                    string fullName = $"{depan} {blkg}".Trim();
                     return (kryId, fullName, pwdHash);
                 }
-                
                 return (null, null, null);
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"Error GetEmployeeDetailsAsync: {ex.Message}");
                 return (null, null, null);
             }
         }
